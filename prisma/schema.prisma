@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DeviceStatus {
+  ACTIVE
+  MAINTENANCE
+  DECOMMISSIONED
+}
+
+enum QualityFlag {
+  GOOD
+  OUT_OF_RANGE
+  INVALID
+}
+
+model User {
+  id            String                @id @default(uuid()) @db.Uuid
+  name          String                @db.VarChar(150)
+  email         String                @unique @db.VarChar(255)
+  passwordHash  String                @map("password_hash") @db.VarChar(255)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  statusChanges DeviceStatusHistory[]
+
+  @@map("users")
+}
+
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(150)
+  latitude  Decimal  @db.Decimal(9, 6)
+  longitude Decimal  @db.Decimal(9, 6)
+  altitudeM Decimal  @map("altitude_m") @db.Decimal(8, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  devices   Device[]
+
+  @@map("location")
+}
+
+model Device {
+  id              String       @id @default(uuid()) @db.Uuid
+  deviceCode      String       @unique @map("device_code") @db.VarChar(50)
+  name            String       @db.VarChar(150)
+  locationId      String       @map("location_id") @db.Uuid
+  apiKeyHash      String       @map("api_key_hash") @db.VarChar(255)
+  status          DeviceStatus @default(ACTIVE)
+  lastSeenAt      DateTime?    @map("last_seen_at") @db.Timestamptz(3)
+  lastDeviceTime  DateTime?    @map("last_device_time") @db.Timestamptz(3)
+  firmwareVersion String?      @map("firmware_version") @db.VarChar(50)
+  batteryV        Decimal?     @map("battery_v") @db.Decimal(5, 2)
+  rssi            Int?
+  uptimeS         BigInt?      @map("uptime_s")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?    @map("deleted_at") @db.Timestamptz(3)
+
+  location          Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  statusHistory     DeviceStatusHistory[]
+  installations     SensorInstallation[]
+  readingAggregates ReadingAggregate[]
+
+  @@index([locationId])
+  @@index([status])
+  @@index([lastSeenAt])
+  @@index([status, deletedAt])
+  @@map("device")
+}
+
+model DeviceStatusHistory {
+  id              String        @id @default(uuid()) @db.Uuid
+  deviceId        String        @map("device_id") @db.Uuid
+  fromStatus      DeviceStatus? @map("from_status")
+  toStatus        DeviceStatus  @map("to_status")
+  reason          String?
+  changedByUserId String?       @map("changed_by_user_id") @db.Uuid
+  changedAt       DateTime      @default(now()) @map("changed_at") @db.Timestamptz(3)
+
+  device    Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  changedBy User?  @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([deviceId, changedAt])
+  @@map("device_status_history")
+}
+
+model SensorType {
+  id        String    @id @default(uuid()) @db.Uuid
+  code      String    @unique @db.VarChar(50)
+  name      String    @db.VarChar(100)
+  unit      String    @db.VarChar(30)
+  validMin  Decimal   @map("valid_min") @db.Decimal(12, 4)
+  validMax  Decimal   @map("valid_max") @db.Decimal(12, 4)
+  precision Int
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  sensors           Sensor[]
+  readingAggregates ReadingAggregate[]
+
+  @@map("sensor_type")
+}
+
+model Sensor {
+  id           String    @id @default(uuid()) @db.Uuid
+  serialNumber String    @unique @map("serial_number") @db.VarChar(100)
+  sensorTypeId String    @map("sensor_type_id") @db.Uuid
+  name         String?   @db.VarChar(150)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  sensorType    SensorType           @relation(fields: [sensorTypeId], references: [id], onDelete: Restrict)
+  installations SensorInstallation[]
+  calibrations  SensorCalibration[]
+
+  @@index([sensorTypeId])
+  @@map("sensor")
+}
+
+model SensorInstallation {
+  id          String    @id @default(uuid()) @db.Uuid
+  sensorId    String    @map("sensor_id") @db.Uuid
+  deviceId    String    @map("device_id") @db.Uuid
+  installedAt DateTime  @map("installed_at") @db.Timestamptz(3)
+  removedAt   DateTime? @map("removed_at") @db.Timestamptz(3)
+
+  sensor   Sensor          @relation(fields: [sensorId], references: [id], onDelete: Restrict)
+  device   Device          @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  readings SensorReading[]
+
+  @@index([sensorId, installedAt])
+  @@index([deviceId, installedAt])
+  @@map("sensor_installation")
+}
+
+model SensorCalibration {
+  id            String   @id @default(uuid()) @db.Uuid
+  sensorId      String   @map("sensor_id") @db.Uuid
+  effectiveFrom DateTime @map("effective_from") @db.Timestamptz(3)
+  offset        Decimal  @default(0) @db.Decimal(12, 4)
+  scale         Decimal  @default(1) @db.Decimal(12, 6)
+  note          String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sensor   Sensor          @relation(fields: [sensorId], references: [id], onDelete: Restrict)
+  readings SensorReading[]
+
+  @@index([sensorId, effectiveFrom])
+  @@map("sensor_calibration")
+}
+
+model SensorReading {
+  id             BigInt      @id @default(autoincrement())
+  installationId String      @map("installation_id") @db.Uuid
+  calibrationId  String?     @map("calibration_id") @db.Uuid
+  deviceTime     DateTime    @map("device_time") @db.Timestamptz(3)
+  serverTime     DateTime    @default(now()) @map("server_time") @db.Timestamptz(3)
+  seq            Int
+  rawValue       Decimal     @map("raw_value") @db.Decimal(12, 4)
+  correctedValue Decimal     @map("corrected_value") @db.Decimal(12, 4)
+  qualityFlag    QualityFlag @default(GOOD) @map("quality_flag")
+
+  installation SensorInstallation @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  calibration  SensorCalibration? @relation(fields: [calibrationId], references: [id], onDelete: SetNull)
+
+  @@unique([installationId, deviceTime])
+  @@index([deviceTime])
+  @@index([serverTime])
+  @@map("sensor_reading")
+}
+
+model ReadingAggregate {
+  id             BigInt   @id @default(autoincrement())
+  deviceId       String   @map("device_id") @db.Uuid
+  sensorTypeId   String   @map("sensor_type_id") @db.Uuid
+  bucketStart    DateTime @map("bucket_start") @db.Timestamptz(3)
+  bucketInterval String   @map("bucket_interval") @db.VarChar(10)
+  minValue       Decimal? @map("min_value") @db.Decimal(12, 4)
+  maxValue       Decimal? @map("max_value") @db.Decimal(12, 4)
+  avgValue       Decimal? @map("avg_value") @db.Decimal(12, 4)
+  sumValue       Decimal? @map("sum_value") @db.Decimal(18, 4)
+  sampleCount    Int      @map("sample_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  device     Device     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sensorType SensorType @relation(fields: [sensorTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, sensorTypeId, bucketInterval, bucketStart])
+  @@index([deviceId, bucketStart])
+  @@map("reading_aggregate")
+}

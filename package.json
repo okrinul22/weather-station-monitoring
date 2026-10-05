@@ -1,0 +1,28 @@
+{
+  "name": "weather-station-monitoring",
+  "version": "1.0.0",
+  "description": "Weather station monitoring backend API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@prisma/client": "7.10.0",
+    "dotenv": "18.0.5",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0"
+  }
+}
