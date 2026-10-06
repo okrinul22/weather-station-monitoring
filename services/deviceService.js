@@ -15,18 +15,6 @@ export async function listDevices({ status, location_id, q, page, limit }) {
             { location: { is: { name: search } } },
         ];
     }
-    const asdasd = {
-        name: "asdasd",
-        height: 123,
-        weight: 123,
-        address: "asdasd",
-        age: 123,
-        gender: "asdasd"
-    }
-
-    const [name, height] = asdasd
-    const angka = [12, 23, 45]
-    const [t1, t2] = angka
     // Kedua query membaca snapshot yang sama agar total cocok dengan items.
     const [total, items] = await prisma.$transaction([
         prisma.device.count({ where }),
