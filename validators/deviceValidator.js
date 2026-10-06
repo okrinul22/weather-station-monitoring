@@ -29,3 +29,12 @@ export const createDeviceSchema = z.strictObject({
     location_id: z.uuid({ error: "location_id harus berupa UUID yang valid." }),
     status: z.enum(["ACTIVE", "MAINTENANCE", "DECOMMISSIONED"]).default("ACTIVE"),
 });
+
+export const updateDeviceSchema = z.strictObject({
+    device_code: z.string().trim().min(1, "Kode device tidak boleh kosong.").max(50).optional(),
+    name: z.string().trim().min(1, "Nama device tidak boleh kosong.").max(150).optional(),
+    location_id: z.uuid({ error: "location_id harus berupa UUID yang valid." }).optional(),
+    status: z.enum(["ACTIVE", "MAINTENANCE", "DECOMMISSIONED"]).optional(),
+}).refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: "Kirim minimal satu field yang ingin diubah.",
+});

@@ -24,3 +24,8 @@ export const createsensorSchema = z.strictObject({
     serial_number: z.string().trim().min(1, "Serial number sensor wajib diisi.").max(50, "Serial number sensor maksimal 50 karakter."),
     sensor_type_id: z.uuid({ error: "sensor_type_id harus berupa UUID yang valid." }),
 });
+
+export const updateSensorSchema = createsensorSchema.partial().refine(
+    (data) => Object.values(data).some((value) => value !== undefined),
+    { message: "Kirim minimal satu field yang ingin diubah." },
+);

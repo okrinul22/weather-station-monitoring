@@ -1,6 +1,43 @@
-import { sensorListQuerySchema, sensorIdParamsSchema, createsensorSchema } from "../validators/sensorValidator.js";
-import { listSensors, findSensorById, createSensor } from "../services/sensorService.js";
+import { sensorListQuerySchema, sensorIdParamsSchema, createsensorSchema, updateSensorSchema } from "../validators/sensorValidator.js";
+import { listSensors, findSensorById, createSensor, updateSensor } from "../services/sensorService.js";
 import sendResponse from "../utils/response.js";
+
+export async function patchSensor(req, res, next) {
+    const params = sensorIdParamsSchema.safeParse(req.params);
+    const body = updateSensorSchema.safeParse(req.body);
+    if (!params.success || !body.success) {
+        const issues = [
+            ...(!params.success ? params.error.issues : []),
+            ...(!body.success ? body.error.issues : []),
+        ];
+        return sendResponse(res, {
+            status: 422, code: "VALIDATION_ERROR",
+            error: {
+                message: "ID atau data sensor tidak valid.",
+                details: issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
+            },
+        });
+    }
+
+    try {
+        const data = await updateSensor(params.data.id, body.data);
+        return sendResponse(res, { status: 200, code: "SENSOR_UPDATED", data });
+    } catch (error) {
+        if (error.code === "SENSOR_NOT_FOUND" || error.code === "P2025") {
+            return sendResponse(res, { status: 404, code: "SENSOR_NOT_FOUND", error: "Sensor tidak ditemukan." });
+        }
+        if (error.code === "SENSOR_TYPE_NOT_FOUND" || error.code === "P2003") {
+            return sendResponse(res, { status: 404, code: "SENSOR_TYPE_NOT_FOUND", error: "Tipe sensor tidak ditemukan." });
+        }
+        if (error.code === "P2002") {
+            return sendResponse(res, { status: 409, code: "SENSOR_SERIAL_NUMBER_EXISTS", error: "Serial number sensor sudah digunakan, termasuk oleh sensor yang sudah di-soft-delete." });
+        }
+        if (error.code === "P2034") {
+            return sendResponse(res, { status: 409, code: "SENSOR_UPDATE_CONFLICT", error: "Terjadi konflik pembaruan bersamaan. Silakan ulangi request." });
+        }
+        return next(error);
+    }
+}
 
 export async function postsensor(req, res, next) {
     const result = createsensorSchema.safeParse(req.body);

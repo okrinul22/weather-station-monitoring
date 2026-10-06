@@ -13,6 +13,36 @@ const openapi = {
 
     paths: {
         "/api/v1/sensors/{id}": {
+            patch: {
+                summary: "Memperbarui sebagian data sensor",
+                description: "Kirim minimal satu field. Field yang tidak dikirim tetap. Sensor soft-delete tidak dapat diubah; sensor_type_id harus mengacu pada tipe yang belum soft-delete. Pemasangan dan kalibrasi tidak diubah. Perubahan tipe tidak memproses ulang pembacaan lama. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Sensors"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object", minProperties: 1, additionalProperties: false,
+                                properties: {
+                                    name: { type: "string", minLength: 1, maxLength: 150 },
+                                    serial_number: { type: "string", minLength: 1, maxLength: 50 },
+                                    sensor_type_id: { type: "string", format: "uuid" },
+                                },
+                            },
+                            example: { name: "Sensor Suhu Garut Updated" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Sensor diperbarui. Code SENSOR_UPDATED; data berisi sensor dan relasi sensorType." },
+                    "400": { description: "Format JSON tidak valid. Code INVALID_JSON." },
+                    "404": { description: "Sensor atau tipe sensor tidak ditemukan/soft-delete. Code SENSOR_NOT_FOUND atau SENSOR_TYPE_NOT_FOUND." },
+                    "409": { description: "Serial number sudah digunakan (SENSOR_SERIAL_NUMBER_EXISTS), atau konflik transaksi bersamaan (SENSOR_UPDATE_CONFLICT)." },
+                    "422": { description: "ID/body tidak valid, body kosong, atau field tidak dikenal. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             get: {
                 summary: "Mengambil detail sensor",
                 description: "Mengambil sensor yang belum di-soft-delete beserta tipe sensornya.",
@@ -33,6 +63,39 @@ const openapi = {
             },
         },
         "/api/v1/sensor-types/{id}": {
+            patch: {
+                summary: "Memperbarui sebagian data tipe sensor",
+                description: "Kirim minimal satu field. valid_min harus lebih kecil dari valid_max setelah digabung dengan nilai tersimpan. Presisi 0–4. Data soft-delete tidak dapat diubah. Nilai mentah, koreksi, dan quality flag pembacaan lama tidak dihitung ulang. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Sensor Types"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object", minProperties: 1, additionalProperties: false,
+                                properties: {
+                                    code: { type: "string", minLength: 1, maxLength: 50 },
+                                    name: { type: "string", minLength: 1, maxLength: 100 },
+                                    unit: { type: "string", minLength: 1, maxLength: 30 },
+                                    valid_min: { type: "number", minimum: -99999999.9999, maximum: 99999999.9999, multipleOf: 0.0001 },
+                                    valid_max: { type: "number", minimum: -99999999.9999, maximum: 99999999.9999, multipleOf: 0.0001 },
+                                    precision: { type: "integer", minimum: 0, maximum: 4 },
+                                },
+                            },
+                            example: { name: "Suhu Tanah Updated", valid_max: 90 },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Tipe sensor diperbarui. Code SENSOR_TYPE_UPDATED; data berisi tipe sensor dengan nilai Decimal sebagai string." },
+                    "400": { description: "Format JSON tidak valid. Code INVALID_JSON." },
+                    "404": { description: "Tipe sensor tidak ditemukan atau sudah soft-delete. Code SENSOR_TYPE_NOT_FOUND." },
+                    "409": { description: "Kode sudah digunakan (SENSOR_TYPE_CODE_EXISTS), atau konflik transaksi bersamaan (SENSOR_TYPE_UPDATE_CONFLICT)." },
+                    "422": { description: "ID/body tidak valid, body kosong, rentang tidak valid, atau field tidak dikenal. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             get: {
                 summary: "Mengambil detail tipe sensor",
                 description: "Mengambil tipe sensor yang belum di-soft-delete beserta satuan, rentang valid, dan presisinya.",
@@ -537,6 +600,37 @@ const openapi = {
             }
         },
         "/api/v1/devices/{id}": {
+            patch: {
+                summary: "Memperbarui sebagian data device",
+                description: "Kirim minimal satu field. Field yang tidak dikirim tetap. Device soft-delete tidak dapat diperbarui. Perubahan status dicatat secara atomik di riwayat status; status yang sama tidak menambah riwayat. API key dan heartbeat tidak dapat diubah. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Devices"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object", minProperties: 1, additionalProperties: false,
+                                properties: {
+                                    device_code: { type: "string", minLength: 1, maxLength: 50 },
+                                    name: { type: "string", minLength: 1, maxLength: 150 },
+                                    location_id: { type: "string", format: "uuid" },
+                                    status: { type: "string", enum: ["ACTIVE", "MAINTENANCE", "DECOMMISSIONED"] },
+                                },
+                            },
+                            example: { name: "Weather Station Garut Updated", status: "MAINTENANCE" },
+                        },
+                    },
+                },
+                responses: {
+                    "200": { description: "Device diperbarui. Envelope berisi code DEVICE_UPDATED, data objek device dan lokasi tanpa API key/hash, error null, dan timestamp." },
+                    "400": { description: "Format JSON tidak valid. Code INVALID_JSON." },
+                    "404": { description: "Device tidak ditemukan/soft-delete (DEVICE_NOT_FOUND), atau lokasi tidak ditemukan (LOCATION_NOT_FOUND)." },
+                    "409": { description: "Kode device sudah digunakan (DEVICE_CODE_EXISTS), atau konflik transaksi bersamaan (DEVICE_UPDATE_CONFLICT)." },
+                    "422": { description: "ID/body tidak valid, body kosong, atau field tidak dikenal. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             get: {
                 summary: "Mengambil detail device berdasarkan ID",
                 description: "Mengambil detail device yang belum di-soft-delete berdasarkan ID. Nilai koordinat dan altitude dikirim sebagai string desimal.",

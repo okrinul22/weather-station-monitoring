@@ -25,6 +25,20 @@ const sensorRangeValue = z.number()
     .max(99999999.9999, "Nilai melebihi batas penyimpanan database.")
     .multipleOf(0.0001, "Nilai maksimal memiliki 4 angka desimal.");
 
+export const updateSensorTypeSchema = z.strictObject({
+    code: z.string().trim().min(1, "Kode tidak boleh kosong.").max(50).optional(),
+    name: z.string().trim().min(1, "Nama tidak boleh kosong.").max(100).optional(),
+    unit: z.string().trim().min(1, "Satuan tidak boleh kosong.").max(30).optional(),
+    valid_min: sensorRangeValue.optional(),
+    valid_max: sensorRangeValue.optional(),
+    precision: z.number().int().min(0).max(4).optional(),
+}).refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: "Kirim minimal satu field yang ingin diubah.",
+}).refine((data) => data.valid_min === undefined || data.valid_max === undefined || data.valid_min < data.valid_max, {
+    path: ["valid_max"],
+    message: "valid_max harus lebih besar dari valid_min.",
+});
+
 export const createSensorTypeSchema = z.strictObject({
     code: z.string().trim().min(1, "Kode tipe sensor wajib diisi.").max(50, "Kode maksimal 50 karakter."),
     name: z.string().trim().min(1, "Nama tipe sensor wajib diisi.").max(100, "Nama maksimal 100 karakter."),

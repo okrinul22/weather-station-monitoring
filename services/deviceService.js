@@ -1,6 +1,61 @@
 import prisma from "../utils/prisma.js";
 import { randomBytes, createHash } from "node:crypto";
 
+export async function updateDevice(id, { device_code, name, location_id, status }) {
+    // Satu transaksi menjaga perubahan device dan riwayat status tetap konsisten.
+    return prisma.$transaction(async (tx) => {
+        const current = await tx.device.findFirst({
+            where: { id, deletedAt: null },
+            select: { id: true, status: true },
+        });
+        if (!current) {
+            const error = new Error("Device tidak ditemukan.");
+            error.code = "DEVICE_NOT_FOUND";
+            throw error;
+        }
+
+        if (location_id !== undefined) {
+            const location = await tx.location.findUnique({
+                where: { id: location_id },
+                select: { id: true },
+            });
+            if (!location) {
+                const error = new Error("Lokasi tidak ditemukan.");
+                error.code = "LOCATION_NOT_FOUND";
+                throw error;
+            }
+        }
+
+        // Field yang tidak dikirim tidak ikut diubah.
+        const data = {};
+        if (device_code !== undefined) data.deviceCode = device_code;
+        if (name !== undefined) data.name = name;
+        if (location_id !== undefined) data.locationId = location_id;
+        if (status !== undefined && status !== current.status) {
+            data.status = status;
+            data.statusHistory = {
+                create: {
+                    fromStatus: current.status,
+                    toStatus: status,
+                    reason: "Status device diperbarui.",
+                },
+            };
+        }
+
+        return tx.device.update({
+            where: { id, deletedAt: null },
+            data,
+            select: {
+                id: true, deviceCode: true, name: true, status: true,
+                locationId: true, lastSeenAt: true, createdAt: true, updatedAt: true,
+                location: {
+                    select: { id: true, name: true, latitude: true, longitude: true, altitudeM: true },
+                },
+            },
+        });
+    }, { isolationLevel: "Serializable" });
+}
+
 export async function createDevice({ device_code, name, location_id, status }) {
     const location = await prisma.location.findUnique({
         where: { id: location_id },
