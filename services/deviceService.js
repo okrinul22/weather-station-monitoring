@@ -1,4 +1,51 @@
 import prisma from "../utils/prisma.js";
+import { randomBytes, createHash } from "node:crypto";
+
+export async function createDevice({ device_code, name, location_id, status }) {
+    const location = await prisma.location.findUnique({
+        where: { id: location_id },
+        select: { id: true },
+    });
+
+    if (!location) {
+        const error = new Error("Lokasi tidak ditemukan.");
+        error.code = "LOCATION_NOT_FOUND";
+        throw error;
+    }
+
+    const apiKey = randomBytes(32).toString("hex");
+    const apiKeyHash = createHash("sha256").update(apiKey).digest("hex");
+
+    // Nested create: device dan riwayat status disimpan bersama secara atomik.
+    const device = await prisma.device.create({
+        data: {
+            deviceCode: device_code,
+            name,
+            locationId: location_id,
+            status,
+            apiKeyHash,
+            statusHistory: {
+                create: { toStatus: status, reason: "Device dibuat." },
+            },
+        },
+        select: {
+            id: true,
+            deviceCode: true,
+            name: true,
+            status: true,
+            locationId: true,
+            lastSeenAt: true,
+            createdAt: true,
+            updatedAt: true,
+            location: {
+                select: { id: true, name: true, latitude: true, longitude: true, altitudeM: true },
+            },
+        },
+    });
+
+    // Key asli hanya dikirim saat pembuatan; GET tidak mengembalikan key/hash.
+    return { ...device, apiKey };
+}
 
 export async function listDevices({ status, location_id, q, page, limit }) {
     const where = { deletedAt: null };

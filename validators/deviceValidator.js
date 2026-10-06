@@ -22,3 +22,10 @@ export const deviceIdParamsSchema = z.object({
         error: "ID device harus berupa UUID yang valid.",
     }),
 });
+
+export const createDeviceSchema = z.strictObject({
+    device_code: z.string().trim().min(1, "Kode device wajib diisi.").max(50, "Kode device maksimal 50 karakter."),
+    name: z.string().trim().min(1, "Nama device wajib diisi.").max(150, "Nama device maksimal 150 karakter."),
+    location_id: z.uuid({ error: "location_id harus berupa UUID yang valid." }),
+    status: z.enum(["ACTIVE", "MAINTENANCE", "DECOMMISSIONED"]).default("ACTIVE"),
+});

@@ -18,3 +18,9 @@ export const sensorListQuerySchema = z.object({
 export const sensorIdParamsSchema = z.object({
     id: z.uuid({ error: "ID sensor harus berupa UUID yang valid." }),
 });
+
+export const createsensorSchema = z.strictObject({
+    name: z.string().trim().min(1, "Nama sensor wajib diisi.").max(150, "Nama sensor maksimal 150 karakter."),
+    serial_number: z.string().trim().min(1, "Serial number sensor wajib diisi.").max(50, "Serial number sensor maksimal 50 karakter."),
+    sensor_type_id: z.uuid({ error: "sensor_type_id harus berupa UUID yang valid." }),
+});
