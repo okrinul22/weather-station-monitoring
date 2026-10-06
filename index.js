@@ -2,14 +2,21 @@ import express from "express";
 import { pathToFileURL } from "node:url";
 import sendResponse from "./utils/response.js";
 import healthRoutes from "./routes/healthRoutes.js";
+import swaggerUi from "swagger-ui-express";
+import openapi from "./docs/openapi.js";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
-app.use("/health", healthRoutes);
+app.use(
+    "/api-docs",
+    swaggerUi.serve,
+    swaggerUi.setup(openapi)
+);
 
+app.use("/health", healthRoutes);
 
 app.use((req, res) => {
     return sendResponse(res, {
