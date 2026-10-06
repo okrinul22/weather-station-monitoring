@@ -1,7 +1,7 @@
-require("dotenv/config");
-const { createHash, randomBytes, scryptSync } = require("node:crypto");
-const { PrismaPg } = require("@prisma/adapter-pg");
-const { PrismaClient, Prisma } = require("../generated/prisma");
+import "dotenv/config";
+import { createHash, randomBytes, scryptSync } from "node:crypto";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient, Prisma } from "../generated/prisma/index.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
