@@ -12,6 +12,46 @@ const openapi = {
     ],
 
     paths: {
+        "/api/v1/sensors/{id}": {
+            get: {
+                summary: "Mengambil detail sensor",
+                description: "Mengambil sensor yang belum di-soft-delete beserta tipe sensornya.",
+                tags: ["Sensors"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    description: "ID sensor, bukan serial number.",
+                    schema: { type: "string", format: "uuid" },
+                }],
+                responses: {
+                    "200": { description: "Sensor ditemukan. Response berisi code SENSOR_FETCHED, data objek sensor, error null, dan timestamp." },
+                    "404": { description: "Sensor tidak ditemukan atau sudah di-soft-delete. Code SENSOR_NOT_FOUND." },
+                    "422": { description: "ID bukan UUID yang valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
+        },
+        "/api/v1/sensor-types/{id}": {
+            get: {
+                summary: "Mengambil detail tipe sensor",
+                description: "Mengambil tipe sensor yang belum di-soft-delete beserta satuan, rentang valid, dan presisinya.",
+                tags: ["Sensor Types"],
+                parameters: [{
+                    name: "id",
+                    in: "path",
+                    required: true,
+                    description: "ID tipe sensor, bukan kode tipe sensor.",
+                    schema: { type: "string", format: "uuid" },
+                }],
+                responses: {
+                    "200": { description: "Tipe sensor ditemukan. Response berisi code SENSOR_TYPE_FETCHED, data objek tipe sensor, error null, dan timestamp." },
+                    "404": { description: "Tipe sensor tidak ditemukan atau sudah di-soft-delete. Code SENSOR_TYPE_NOT_FOUND." },
+                    "422": { description: "ID bukan UUID yang valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
+        },
         "/health": {
             get: {
                 summary: "Memeriksa apakah API dapat merespons",
@@ -291,6 +331,97 @@ const openapi = {
                                     error: {
                                         message: "Parameter query tidak valid.",
                                         details: [{ field: "page", message: "Nomor halaman harus antara 1 dan 100000." }],
+                                    },
+                                    timestamp: "2026-10-06T10:00:00.000Z",
+                                },
+                            },
+                        },
+                    },
+                    "500": {
+                        description: "Kesalahan internal atau kegagalan akses database.",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    code: "INTERNAL_SERVER_ERROR",
+                                    data: null,
+                                    error: "Terjadi kesalahan pada server.",
+                                    timestamp: "2026-10-06T10:00:00.000Z",
+                                },
+                            },
+                        },
+                    },
+                },
+            }
+        },
+        "/api/v1/devices/{id}": {
+            get: {
+                summary: "Mengambil detail device berdasarkan ID",
+                description: "Mengambil detail device yang belum di-soft-delete berdasarkan ID. Nilai koordinat dan altitude dikirim sebagai string desimal.",
+                tags: ["Devices"],
+
+                parameters: [
+                    {
+                        name: "id",
+                        in: "path",
+                        description: "UUID device.",
+                        required: true,
+                        schema: { type: "string", format: "uuid" },
+                    },
+                ],
+
+                responses: {
+                    "200": {
+                        description: "Detail device berhasil diambil.",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    code: "DEVICE_FETCHED",
+                                    data: {
+                                        id: "550e8400-e29b-41d4-a716-446655440000",
+                                        deviceCode: "WS-GRT-001",
+                                        name: "Stasiun Garut",
+                                        status: "ACTIVE",
+                                        locationId: "550e8400-e29b-41d4-a716-446655440001",
+                                        lastSeenAt: null,
+                                        createdAt: "2026-10-06T00:00:00.000Z",
+                                        updatedAt: "2026-10-06T00:00:00.000Z",
+                                        location: {
+                                            id: "550e8400-e29b-41d4-a716-446655440001",
+                                            name: "Garut",
+                                            latitude: "-7.2167",
+                                            longitude: "107.9",
+                                            altitudeM: "717",
+                                        },
+                                    },
+                                    error: null,
+                                    timestamp: "2026-10-06T10:00:00.000Z",
+                                },
+                            },
+                        },
+                    },
+                    "404": {
+                        description: "Device tidak ditemukan.",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    code: "DEVICE_NOT_FOUND",
+                                    data: null,
+                                    error: "Device tidak ditemukan.",
+                                    timestamp: "2026-10-06T10:00:00.000Z",
+                                },
+                            },
+                        },
+                    },
+                    "422": {
+                        description: "ID device tidak valid.",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    code: "VALIDATION_ERROR",
+                                    data: null,
+                                    error: {
+                                        message: "ID device tidak valid.",
+                                        details: [{ field: "id", message: "ID device harus berupa UUID yang valid." }],
                                     },
                                     timestamp: "2026-10-06T10:00:00.000Z",
                                 },

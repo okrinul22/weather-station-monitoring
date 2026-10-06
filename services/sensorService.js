@@ -1,5 +1,22 @@
 import prisma from "../utils/prisma.js";
 
+export async function findSensorById(id) {
+    return prisma.sensor.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+            id: true,
+            serialNumber: true,
+            name: true,
+            sensorTypeId: true,
+            createdAt: true,
+            updatedAt: true,
+            sensorType: {
+                select: { id: true, code: true, name: true, unit: true },
+            },
+        },
+    });
+}
+
 export async function listSensors({ q, page, limit }) {
     const where = { deletedAt: null };
 

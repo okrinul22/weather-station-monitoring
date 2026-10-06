@@ -14,3 +14,7 @@ export const sensorListTypeQuerySchema = z.object({
     page: positiveInteger(100000, 1),
     limit: positiveInteger(200, 10),
 });
+
+export const sensorTypeIdParamsSchema = z.object({
+    id: z.uuid({ error: "ID tipe sensor harus berupa UUID yang valid." }),
+});

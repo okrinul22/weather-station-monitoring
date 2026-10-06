@@ -55,3 +55,30 @@ export async function listDevices({ status, location_id, q, page, limit }) {
         },
     };
 }
+export async function findDeviceById(id) {
+    return prisma.device.findFirst({
+        where: {
+            id,
+            deletedAt: null,
+        },
+        select: {
+            id: true,
+            deviceCode: true,
+            name: true,
+            status: true,
+            locationId: true,
+            lastSeenAt: true,
+            createdAt: true,
+            updatedAt: true,
+            location: {
+                select: {
+                    id: true,
+                    name: true,
+                    latitude: true,
+                    longitude: true,
+                    altitudeM: true,
+                },
+            },
+        },
+    });
+}
