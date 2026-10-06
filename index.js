@@ -2,6 +2,9 @@ import express from "express";
 import { pathToFileURL } from "node:url";
 import sendResponse from "./utils/response.js";
 import healthRoutes from "./routes/healthRoutes.js";
+import deviceRoutes from "./routes/deviceRoutes.js";
+import sensorTypeRoutes from "./routes/sensorTypeRoutes.js";
+import sensorRoutes from "./routes/sensorRoutes.js";
 import swaggerUi from "swagger-ui-express";
 import openapi from "./docs/openapi.js";
 
@@ -16,7 +19,14 @@ app.use(
     swaggerUi.setup(openapi)
 );
 
+app.get("/openapi.json", (req, res) => {
+    res.json(openapi);
+});
+
 app.use("/health", healthRoutes);
+app.use("/api/v1/devices", deviceRoutes);
+app.use("/api/v1/sensor-types", sensorTypeRoutes);
+app.use("/api/v1/sensors", sensorRoutes);
 
 app.use((req, res) => {
     return sendResponse(res, {
