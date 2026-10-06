@@ -1,6 +1,37 @@
 import { sensorListQuerySchema, sensorIdParamsSchema, createsensorSchema, updateSensorSchema } from "../validators/sensorValidator.js";
-import { listSensors, findSensorById, createSensor, updateSensor } from "../services/sensorService.js";
+import { listSensors, findSensorById, createSensor, updateSensor, softDeleteSensor } from "../services/sensorService.js";
 import sendResponse from "../utils/response.js";
+
+export async function deleteSensor(req, res, next) {
+    const result = sensorIdParamsSchema.safeParse(req.params);
+    if (!result.success) {
+        return sendResponse(res, {
+            status: 422, code: "VALIDATION_ERROR",
+            error: {
+                message: "ID sensor tidak valid.",
+                details: result.error.issues.map((issue) => ({
+                    field: issue.path.join("."), message: issue.message,
+                })),
+            },
+        });
+    }
+
+    try {
+        const data = await softDeleteSensor(result.data.id);
+        return sendResponse(res, { status: 200, code: "SENSOR_DELETED", data });
+    } catch (error) {
+        if (error.code === "SENSOR_NOT_FOUND" || error.code === "P2025") {
+            return sendResponse(res, { status: 404, code: "SENSOR_NOT_FOUND", error: "Sensor tidak ditemukan atau sudah di-soft-delete." });
+        }
+        if (error.code === "SENSOR_STILL_INSTALLED") {
+            return sendResponse(res, { status: 409, code: "SENSOR_STILL_INSTALLED", error: error.message });
+        }
+        if (error.code === "P2034") {
+            return sendResponse(res, { status: 409, code: "SENSOR_DELETE_CONFLICT", error: "Terjadi konflik pembaruan bersamaan. Silakan ulangi request." });
+        }
+        return next(error);
+    }
+}
 
 export async function patchSensor(req, res, next) {
     const params = sensorIdParamsSchema.safeParse(req.params);
@@ -62,6 +93,9 @@ export async function postsensor(req, res, next) {
         res.location(`/api/v1/sensors/${data.id}`);
         return sendResponse(res, { status: 201, code: "SENSOR_CREATED", data });
     } catch (error) {
+        if (error.code === "P2034") {
+            return sendResponse(res, { status: 409, code: "SENSOR_CREATE_CONFLICT", error: "Terjadi konflik pembaruan bersamaan. Silakan ulangi request." });
+        }
         if (error.code === "P2002") {
             return sendResponse(res, {
                 status: 409,

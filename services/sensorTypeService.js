@@ -1,5 +1,32 @@
 import prisma from "../utils/prisma.js";
 
+export async function softDeleteSensorType(id) {
+    return prisma.$transaction(async (tx) => {
+        const type = await tx.sensorType.findFirst({
+            where: { id, deletedAt: null }, select: { id: true },
+        });
+        if (!type) {
+            const error = new Error("Tipe sensor tidak ditemukan.");
+            error.code = "SENSOR_TYPE_NOT_FOUND";
+            throw error;
+        }
+        const sensor = await tx.sensor.findFirst({
+            where: { sensorTypeId: id, deletedAt: null }, select: { id: true },
+        });
+        if (sensor) {
+            const error = new Error("Tipe sensor masih digunakan oleh sensor yang belum di-soft-delete.");
+            error.code = "SENSOR_TYPE_IN_USE";
+            throw error;
+        }
+
+        return tx.sensorType.update({
+            where: { id, deletedAt: null },
+            data: { deletedAt: new Date() },
+            select: { id: true, code: true, name: true, deletedAt: true },
+        });
+    }, { isolationLevel: "Serializable" });
+}
+
 export async function updateSensorType(id, { code, name, unit, valid_min, valid_max, precision }) {
     return prisma.$transaction(async (tx) => {
         const current = await tx.sensorType.findFirst({

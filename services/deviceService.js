@@ -1,6 +1,34 @@
 import prisma from "../utils/prisma.js";
 import { randomBytes, createHash } from "node:crypto";
 
+export async function softDeleteDevice(id) {
+    return prisma.$transaction(async (tx) => {
+        const device = await tx.device.findFirst({
+            where: { id, deletedAt: null }, select: { id: true },
+        });
+        if (!device) {
+            const error = new Error("Device tidak ditemukan.");
+            error.code = "DEVICE_NOT_FOUND";
+            throw error;
+        }
+        const installation = await tx.sensorInstallation.findFirst({
+            where: { deviceId: id, removedAt: null }, select: { id: true },
+        });
+        if (installation) {
+            const error = new Error("Device masih memiliki sensor terpasang. Lepaskan semua sensor terlebih dahulu.");
+            error.code = "DEVICE_STILL_HAS_SENSORS";
+            throw error;
+        }
+
+        // Soft-delete tidak mengubah status lifecycle atau menghapus riwayat.
+        return tx.device.update({
+            where: { id, deletedAt: null },
+            data: { deletedAt: new Date() },
+            select: { id: true, deviceCode: true, name: true, deletedAt: true },
+        });
+    }, { isolationLevel: "Serializable" });
+}
+
 export async function updateDevice(id, { device_code, name, location_id, status }) {
     // Satu transaksi menjaga perubahan device dan riwayat status tetap konsisten.
     return prisma.$transaction(async (tx) => {

@@ -13,6 +13,36 @@ const openapi = {
 
     paths: {
         "/api/v1/sensors/{id}": {
+            delete: {
+                summary: "Soft-delete sensor",
+                description: "Mengisi deletedAt tanpa menghapus record atau riwayat pemasangan, kalibrasi, dan pembacaan. Sensor dengan pemasangan yang belum ditutup (removedAt null) harus dilepas dulu. Sensor terhapus tidak muncul pada GET list/detail dan tidak dapat di-PATCH. Serial number tetap dicadangkan. DELETE ulang mendapat 404. Tidak memerlukan body. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Sensors"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                responses: {
+                    "200": {
+                        description: "Sensor berhasil di-soft-delete.",
+                        content: {
+                            "application/json": {
+                                example: {
+                                    code: "SENSOR_DELETED",
+                                    data: {
+                                        id: "550e8400-e29b-41d4-a716-446655440000",
+                                        serialNumber: "SEN-TEMP-001",
+                                        name: "Sensor Suhu Garut",
+                                        deletedAt: "2026-10-06T10:00:00.000Z",
+                                    },
+                                    error: null,
+                                    timestamp: "2026-10-06T10:00:00.000Z",
+                                },
+                            },
+                        },
+                    },
+                    "404": { description: "Sensor tidak ditemukan atau sudah di-soft-delete. Code SENSOR_NOT_FOUND." },
+                    "409": { description: "Sensor masih terpasang (SENSOR_STILL_INSTALLED), atau konflik transaksi bersamaan (SENSOR_DELETE_CONFLICT)." },
+                    "422": { description: "ID sensor bukan UUID yang valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             patch: {
                 summary: "Memperbarui sebagian data sensor",
                 description: "Kirim minimal satu field. Field yang tidak dikirim tetap. Sensor soft-delete tidak dapat diubah; sensor_type_id harus mengacu pada tipe yang belum soft-delete. Pemasangan dan kalibrasi tidak diubah. Perubahan tipe tidak memproses ulang pembacaan lama. Endpoint belum dilindungi autentikasi admin.",
@@ -63,6 +93,26 @@ const openapi = {
             },
         },
         "/api/v1/sensor-types/{id}": {
+            delete: {
+                summary: "Soft-delete tipe sensor",
+                description: "Mengisi deletedAt tanpa menghapus record dan riwayat. Ditolak jika masih dipakai sensor non-soft-delete. Tipe terhapus tidak muncul pada GET list/detail, tidak dapat di-PATCH, dan tidak dapat dipakai untuk POST/PATCH sensor. Kode tetap dicadangkan. DELETE ulang mendapat 404. Tidak memerlukan body. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Sensor Types"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                responses: {
+                    "200": {
+                        description: "Tipe sensor berhasil di-soft-delete.",
+                        content: { "application/json": { example: {
+                            code: "SENSOR_TYPE_DELETED",
+                            data: { id: "550e8400-e29b-41d4-a716-446655440000", code: "temp_soil", name: "Suhu Tanah", deletedAt: "2026-10-06T10:00:00.000Z" },
+                            error: null, timestamp: "2026-10-06T10:00:00.000Z",
+                        } } },
+                    },
+                    "404": { description: "Tipe sensor tidak ditemukan atau sudah di-soft-delete. Code SENSOR_TYPE_NOT_FOUND." },
+                    "409": { description: "Tipe masih dipakai sensor (SENSOR_TYPE_IN_USE), atau konflik transaksi bersamaan (SENSOR_TYPE_DELETE_CONFLICT)." },
+                    "422": { description: "ID bukan UUID valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             patch: {
                 summary: "Memperbarui sebagian data tipe sensor",
                 description: "Kirim minimal satu field. valid_min harus lebih kecil dari valid_max setelah digabung dengan nilai tersimpan. Presisi 0–4. Data soft-delete tidak dapat diubah. Nilai mentah, koreksi, dan quality flag pembacaan lama tidak dihitung ulang. Endpoint belum dilindungi autentikasi admin.",
@@ -600,6 +650,26 @@ const openapi = {
             }
         },
         "/api/v1/devices/{id}": {
+            delete: {
+                summary: "Soft-delete device",
+                description: "Mengisi deletedAt tanpa menghapus record, riwayat status, pemasangan, pembacaan, atau agregat. Ditolak jika masih ada pemasangan belum ditutup (removedAt null). Status lifecycle tidak diubah otomatis. Device terhapus tidak muncul pada GET list/detail dan tidak dapat di-PATCH. Kode tetap dicadangkan. DELETE ulang mendapat 404. Tidak memerlukan body. Endpoint belum dilindungi autentikasi admin.",
+                tags: ["Devices"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                responses: {
+                    "200": {
+                        description: "Device berhasil di-soft-delete.",
+                        content: { "application/json": { example: {
+                            code: "DEVICE_DELETED",
+                            data: { id: "550e8400-e29b-41d4-a716-446655440000", deviceCode: "WS-GRT-004", name: "Weather Station Garut 4", deletedAt: "2026-10-06T10:00:00.000Z" },
+                            error: null, timestamp: "2026-10-06T10:00:00.000Z",
+                        } } },
+                    },
+                    "404": { description: "Device tidak ditemukan atau sudah di-soft-delete. Code DEVICE_NOT_FOUND." },
+                    "409": { description: "Device masih memiliki sensor terpasang (DEVICE_STILL_HAS_SENSORS), atau konflik transaksi bersamaan (DEVICE_DELETE_CONFLICT)." },
+                    "422": { description: "ID bukan UUID valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal server. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
             patch: {
                 summary: "Memperbarui sebagian data device",
                 description: "Kirim minimal satu field. Field yang tidak dikirim tetap. Device soft-delete tidak dapat diperbarui. Perubahan status dicatat secara atomik di riwayat status; status yang sama tidak menambah riwayat. API key dan heartbeat tidak dapat diubah. Endpoint belum dilindungi autentikasi admin.",

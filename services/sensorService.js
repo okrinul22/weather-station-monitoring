@@ -1,5 +1,36 @@
 import prisma from "../utils/prisma.js";
 
+export async function softDeleteSensor(id) {
+    return prisma.$transaction(async (tx) => {
+        const sensor = await tx.sensor.findFirst({
+            where: { id, deletedAt: null },
+            select: { id: true },
+        });
+        if (!sensor) {
+            const error = new Error("Sensor tidak ditemukan.");
+            error.code = "SENSOR_NOT_FOUND";
+            throw error;
+        }
+
+        const installation = await tx.sensorInstallation.findFirst({
+            where: { sensorId: id, removedAt: null },
+            select: { id: true },
+        });
+        if (installation) {
+            const error = new Error("Sensor masih terpasang pada device. Lepaskan sensor terlebih dahulu.");
+            error.code = "SENSOR_STILL_INSTALLED";
+            throw error;
+        }
+
+        // Hanya tandai sensor; pemasangan, kalibrasi, dan pembacaan tetap tersimpan.
+        return tx.sensor.update({
+            where: { id, deletedAt: null },
+            data: { deletedAt: new Date() },
+            select: { id: true, serialNumber: true, name: true, deletedAt: true },
+        });
+    }, { isolationLevel: "Serializable" });
+}
+
 export async function updateSensor(id, { name, serial_number, sensor_type_id }) {
     return prisma.$transaction(async (tx) => {
         const current = await tx.sensor.findFirst({
@@ -42,24 +73,35 @@ export async function updateSensor(id, { name, serial_number, sensor_type_id }) 
 }
 
 export async function createSensor({ name, serial_number, sensor_type_id }) {
-    return prisma.sensor.create({
-        data: {
-            name,
-            serialNumber: serial_number,
-            sensorTypeId: sensor_type_id,
-        },
-        select: {
-            id: true,
-            serialNumber: true,
-            name: true,
-            sensorTypeId: true,
-            createdAt: true,
-            updatedAt: true,
-            sensorType: {
-                select: { id: true, code: true, name: true, unit: true },
+    return prisma.$transaction(async (tx) => {
+        const type = await tx.sensorType.findFirst({
+            where: { id: sensor_type_id, deletedAt: null },
+            select: { id: true },
+        });
+        if (!type) {
+            const error = new Error("Tipe sensor tidak ditemukan atau sudah di-soft-delete.");
+            error.code = "SENSOR_TYPE_NOT_FOUND";
+            throw error;
+        }
+        return tx.sensor.create({
+            data: {
+                name,
+                serialNumber: serial_number,
+                sensorTypeId: sensor_type_id,
             },
-        },
-    });
+            select: {
+                id: true,
+                serialNumber: true,
+                name: true,
+                sensorTypeId: true,
+                createdAt: true,
+                updatedAt: true,
+                sensorType: {
+                    select: { id: true, code: true, name: true, unit: true },
+                },
+            },
+        });
+    }, { isolationLevel: "Serializable" });
 }
 
 export async function findSensorById(id) {
