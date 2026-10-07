@@ -9,7 +9,9 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -19,7 +21,36 @@ TELEMETRY_ENDPOINT = "/api/v1/ingest/telemetry"
 BATCH_ENDPOINT = "/api/v1/ingest/telemetry/batch"
 
 LOG = logging.getLogger("simulator")
+TRAFFIC_LOG = logging.getLogger("simulator.traffic")
+TRAFFIC_LOG.propagate = False
 DEFAULT_DEVICES_FILE = Path(__file__).with_name("devices.json")
+
+
+def configure_traffic_log():
+    """One payload/response log file per run, with timestamps in WIB."""
+    directory = Path(__file__).with_name("logs")
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y%m%d-%H%M%S-%f")
+    path = directory / f"log-{stamp}.log"
+    handler = logging.FileHandler(path, mode="x", encoding="utf-8")
+    formatter = logging.Formatter("%(asctime)s WIB %(levelname)s %(message)s")
+    formatter.converter = lambda seconds: datetime.fromtimestamp(seconds, ZoneInfo("Asia/Jakarta")).timetuple()
+    handler.setFormatter(formatter)
+    for previous in TRAFFIC_LOG.handlers[:]:
+        TRAFFIC_LOG.removeHandler(previous)
+        previous.close()
+    TRAFFIC_LOG.addHandler(handler)
+    TRAFFIC_LOG.setLevel(logging.INFO)
+    return path
+
+
+def readable_body(raw, api_key):
+    text = raw.decode("utf-8", errors="replace")
+    try:
+        text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)
+    except ValueError:
+        pass
+    return (text.replace(api_key, "[REDACTED]") if api_key else text) or "(empty body)"
 
 
 @dataclass
@@ -67,16 +98,21 @@ def post(base_url, path, payload, api_key, timeout):
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["X-API-Key"] = api_key
+    encoded_payload = json.dumps(payload).encode("utf-8")
+    # Each request starts a separate block; payload and response stay together.
+    # Credentials in headers are never written to the traffic log.
+    TRAFFIC_LOG.info("\n\n%s\n%s POST %s\nPayload:\n%s", "=" * 80, payload["device_id"], path, readable_body(encoded_payload, api_key))
     request = Request(
         base_url.rstrip("/") + path,
-        data=json.dumps(payload).encode("utf-8"),
+        data=encoded_payload,
         headers=headers,
         method="POST",
     )
     try:
         with urlopen(request, timeout=timeout) as response:
             status = response.status
-            response.read()
+            body = readable_body(response.read(), api_key)
+        TRAFFIC_LOG.info("%s POST %s HTTP %s\nResponse:\n%s", payload["device_id"], path, status, body)
         if status == 207:
             # Partial-success details aren't specified by F.1. Retry the same
             # records rather than risk dropping rejected ones; backend must dedup.
@@ -86,9 +122,13 @@ def post(base_url, path, payload, api_key, timeout):
         return 200 <= status < 300
     except HTTPError as error:
         LOG.warning("%s POST %s HTTP %s", payload["device_id"], path, error.code)
-        error.close()
+        try:
+            TRAFFIC_LOG.warning("%s POST %s HTTP %s\nResponse:\n%s", payload["device_id"], path, error.code, readable_body(error.read(), api_key))
+        finally:
+            error.close()
     except (URLError, TimeoutError, OSError) as error:
         LOG.warning("%s POST %s failed: %s", payload["device_id"], path, error)
+        TRAFFIC_LOG.warning("%s POST %s\nResponse: not received; %s", payload["device_id"], path, str(error).replace(api_key, "[REDACTED]") if api_key else error)
     return False
 
 
@@ -179,6 +219,11 @@ def parse_args():
 def main():
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    try:
+        log_path = configure_traffic_log()
+    except OSError:
+        raise SystemExit("Cannot create traffic log. Check write permission for simulator/logs/.")
+    LOG.info("Payload/response log: %s", log_path)
     try:
         devices = load_devices(args.devices_file, args.mode)
     except (OSError, ValueError):
