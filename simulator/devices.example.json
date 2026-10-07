@@ -1,0 +1,5 @@
+[
+  {"device_id": "WS-GRT-001", "api_key": "", "mode": "normal"},
+  {"device_id": "WS-GRT-002", "api_key": "", "mode": "offline"},
+  {"device_id": "WS-GRT-003", "api_key": "", "mode": "duplicate"}
+]
