@@ -1,0 +1,287 @@
+Project weather_station_monitoring {
+  database_type: "PostgreSQL"
+  Note: "MVP Weather Station Monitoring"
+}
+
+Enum device_status {
+  ACTIVE
+  MAINTENANCE
+  DECOMMISSIONED
+}
+
+Enum quality_flag {
+  GOOD
+  OUT_OF_RANGE
+  INVALID
+}
+
+/*
+|--------------------------------------------------------------------------
+| USER
+|--------------------------------------------------------------------------
+*/
+
+Table users {
+  id uuid [pk]
+  name varchar(150) [not null]
+  email varchar(255) [not null, unique]
+  password_hash varchar(255) [not null]
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+/*
+|--------------------------------------------------------------------------
+| LOCATION
+|--------------------------------------------------------------------------
+*/
+
+Table location {
+  id uuid [pk]
+  name varchar(150) [not null]
+  latitude decimal(9,6) [not null]
+  longitude decimal(9,6) [not null]
+  altitude_m decimal(8,2) [not null]
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+}
+
+/*
+|--------------------------------------------------------------------------
+| DEVICE
+|--------------------------------------------------------------------------
+*/
+
+Table device {
+  id uuid [pk]
+
+  device_code varchar(50) [not null, unique, note: "Contoh: WS-GRT-001"]
+  name varchar(150) [not null]
+  location_id uuid [not null]
+
+  api_key_hash varchar(255) [not null]
+  status device_status [not null, default: "ACTIVE"]
+
+  last_seen_at timestamptz [note: "Waktu server menerima data terakhir"]
+  last_device_time timestamptz [note: "Nilai ts terakhir dari device"]
+
+  firmware_version varchar(50)
+  battery_v decimal(5,2)
+  rssi integer
+  uptime_s bigint
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz [note: "Soft delete"]
+
+  indexes {
+    location_id
+    status
+    last_seen_at
+    (status, deleted_at)
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| DEVICE STATUS HISTORY
+|--------------------------------------------------------------------------
+*/
+
+Table device_status_history {
+  id uuid [pk]
+  device_id uuid [not null]
+
+  from_status device_status
+  to_status device_status [not null]
+  reason text
+
+  changed_by_user_id uuid
+  changed_at timestamptz [not null]
+
+  indexes {
+    (device_id, changed_at)
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| SENSOR TYPE
+|--------------------------------------------------------------------------
+*/
+
+Table sensor_type {
+  id uuid [pk]
+
+  code varchar(50) [not null, unique, note: "Contoh: temp_air"]
+  name varchar(100) [not null]
+  unit varchar(30) [not null]
+
+  valid_min decimal(12,4) [not null]
+  valid_max decimal(12,4) [not null]
+  precision integer [not null]
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  Note: "Master jenis sensor dan aturan validasi nilainya"
+}
+
+/*
+|--------------------------------------------------------------------------
+| SENSOR
+|--------------------------------------------------------------------------
+*/
+
+Table sensor {
+  id uuid [pk]
+
+  serial_number varchar(100) [not null, unique]
+  sensor_type_id uuid [not null]
+  name varchar(150)
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+  deleted_at timestamptz
+
+  indexes {
+    sensor_type_id
+  }
+
+  Note: "Identitas sensor fisik"
+}
+
+/*
+|--------------------------------------------------------------------------
+| SENSOR INSTALLATION
+|--------------------------------------------------------------------------
+*/
+
+Table sensor_installation {
+  id uuid [pk]
+
+  sensor_id uuid [not null]
+  device_id uuid [not null]
+
+  installed_at timestamptz [not null]
+  removed_at timestamptz
+
+  indexes {
+    (sensor_id, installed_at)
+    (device_id, installed_at)
+  }
+
+  Note: "Riwayat pemasangan dan perpindahan sensor antar-device"
+}
+
+/*
+|--------------------------------------------------------------------------
+| SENSOR CALIBRATION
+|--------------------------------------------------------------------------
+*/
+
+Table sensor_calibration {
+  id uuid [pk]
+  sensor_id uuid [not null]
+
+  effective_from timestamptz [not null]
+  offset decimal(12,4) [not null, default: 0]
+  scale decimal(12,6) [not null, default: 1]
+  note text
+
+  created_at timestamptz [not null]
+
+  indexes {
+    (sensor_id, effective_from)
+  }
+
+  Note: "Rumus: corrected_value = raw_value * scale + offset"
+}
+
+/*
+|--------------------------------------------------------------------------
+| SENSOR READING
+|--------------------------------------------------------------------------
+*/
+
+Table sensor_reading {
+  id bigint [pk, increment]
+
+  installation_id uuid [not null]
+  calibration_id uuid
+
+  device_time timestamptz [not null, note: "Waktu ts dari device"]
+  server_time timestamptz [not null, note: "Waktu diterima server"]
+  seq integer [not null, note: "Reset ke 0 saat device restart"]
+
+  raw_value decimal(12,4) [not null]
+  corrected_value decimal(12,4) [not null]
+  quality_flag quality_flag [not null, default: "GOOD"]
+
+  indexes {
+    device_time
+    server_time
+    (installation_id, device_time) [unique]
+  }
+
+  Note: "Tabel time-series; satu baris untuk satu sensor"
+}
+
+/*
+|--------------------------------------------------------------------------
+| READING AGGREGATE
+|--------------------------------------------------------------------------
+*/
+
+Table reading_aggregate {
+  id bigint [pk, increment]
+
+  device_id uuid [not null]
+  sensor_type_id uuid [not null]
+
+  bucket_start timestamptz [not null]
+  bucket_interval varchar(10) [not null, note: "1m, 1h, atau 1d"]
+
+  min_value decimal(12,4)
+  max_value decimal(12,4)
+  avg_value decimal(12,4)
+  sum_value decimal(18,4)
+  sample_count integer [not null]
+
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    (device_id, sensor_type_id, bucket_interval, bucket_start) [unique]
+    (device_id, bucket_start)
+  }
+
+  Note: "Hasil agregasi untuk mempercepat query dashboard"
+}
+
+/*
+|--------------------------------------------------------------------------
+| RELATIONSHIPS
+|--------------------------------------------------------------------------
+*/
+
+Ref: device.location_id > location.id
+
+Ref: device_status_history.device_id > device.id
+Ref: device_status_history.changed_by_user_id > users.id
+
+Ref: sensor.sensor_type_id > sensor_type.id
+
+Ref: sensor_installation.sensor_id > sensor.id
+Ref: sensor_installation.device_id > device.id
+
+Ref: sensor_calibration.sensor_id > sensor.id
+
+Ref: sensor_reading.installation_id > sensor_installation.id
+Ref: sensor_reading.calibration_id > sensor_calibration.id
+
+Ref: reading_aggregate.device_id > device.id
+Ref: reading_aggregate.sensor_type_id > sensor_type.id

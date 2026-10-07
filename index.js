@@ -7,11 +7,15 @@ import sensorTypeRoutes from "./routes/sensorTypeRoutes.js";
 import sensorRoutes from "./routes/sensorRoutes.js";
 import swaggerUi from "swagger-ui-express";
 import openapi from "./docs/openapi.js";
+import ingestRoutes from "./routes/ingestRoutes.js";
+import requestId from "./middlewares/requestId.js";
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(requestId);
+// 1 MB cukup untuk batch maksimal 500 record; tetap dibatasi agar body tidak tak terbatas.
+app.use(express.json({ limit: "1mb" }));
 
 app.use(
     "/api-docs",
@@ -27,6 +31,7 @@ app.use("/health", healthRoutes);
 app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/sensor-types", sensorTypeRoutes);
 app.use("/api/v1/sensors", sensorRoutes);
+app.use("/api/v1/ingest", ingestRoutes);
 
 app.use((req, res) => {
     return sendResponse(res, {
@@ -45,6 +50,10 @@ app.use((err, req, res, next) => {
             code: "INVALID_JSON",
             error: "Format JSON tidak valid.",
         });
+    }
+
+    if (err.type === "entity.too.large") {
+        return sendResponse(res, { status: 400, code: "PAYLOAD_TOO_LARGE", error: "Ukuran body maksimal 1 MB." });
     }
 
     console.error(err);

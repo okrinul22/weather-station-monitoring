@@ -1,3 +1,5 @@
+import { ingestPaths, ingestSecuritySchemes } from "./ingestOpenapi.js";
+
 const openapi = {
     openapi: "3.0.3",
 
@@ -11,7 +13,10 @@ const openapi = {
         { url: "http://localhost:3000" },
     ],
 
+    components: { securitySchemes: ingestSecuritySchemes },
+
     paths: {
+        ...ingestPaths,
         "/api/v1/devices/{id}/credentials/rotate": {
             post: {
                 summary: "Rotasi API key device",

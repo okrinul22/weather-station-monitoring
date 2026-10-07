@@ -4,6 +4,7 @@ Cara penggunaan di route/controller:
 import sendResponse from "../utils/response.js";
 Sesuaikan path import dengan lokasi file yang memanggil helper; sertakan .js.
 Semua response memiliki code, data, error, dan timestamp UTC otomatis.
+request_id otomatis disertakan dari middleware untuk kebutuhan tracing.
 Field data dan error yang tidak diberikan akan menjadi null.
 Contoh berikut adalah alternatif pemakaian, bukan dijalankan semuanya sekaligus.
 
@@ -52,6 +53,8 @@ function sendResponse(res, { status = 200, code = "OK", data = null, error = nul
     data,
     error,
     timestamp: new Date().toISOString(),
+    // request_id dari middleware membantu mencocokkan respons dengan request.
+    request_id: res.locals.requestId ?? null,
   });
 }
 
