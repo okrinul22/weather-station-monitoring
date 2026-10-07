@@ -14,7 +14,7 @@ simulator membuat file baru; data langsung ditulis setelah tiap catatan log.
 Masuk ke folder:
 
 ```sh
-cd /Users/okri/dev/py/simulator
+cd /home/ubuntu/weather-station-monitoring/simulator
 ```
 
 ## Normal — kirim periodik tiap 60 detik
@@ -39,5 +39,40 @@ Setiap payload dikirim dua kali dengan isi identik setelah request pertama sukse
 python3.11 simulator.py --base-url http://localhost:3000 --interval 60 --mode duplicate
 ```
 
-Mode yang dipilih berlaku untuk semua device. Ganti base URL sesuai backend.
+## Heartbeat — kirim kondisi device tanpa reading sensor
+
+```sh
+python3.11 simulator.py --base-url http://localhost:3000 --interval 60 --mode heartbeat
+```
+
+Setiap device mengirim `POST /api/v1/ingest/heartbeat` setiap 60 detik, memakai
+API key yang sama dari `devices.json`. Respons sukses adalah HTTP 200
+`HEARTBEAT_ACCEPTED`. Backend memperbarui health di tabel `device`, termasuk
+`last_seen_at` dan `uptime_s`; tidak membuat baris `sensor_reading`.
+
+Contoh payload (ts dan uptime dibuat saat pengiriman):
+
+```json
+{
+  "device_id": "DEMO-WS-GRT-001",
+  "ts": 1791345263,
+  "fw": "1.4.2",
+  "battery_v": 3.9,
+  "rssi": -70,
+  "uptime_s": 60
+}
+```
+
+`uptime_s` dihitung sejak device virtual dibuat oleh simulator, bukan uptime
+Ubuntu. Nilai mulai sekitar 0 dan bertambah selama proses berjalan; menjalankan
+ulang simulator meniru device boot ulang. Jika pengiriman gagal, siklus berikutnya
+mengirim heartbeat baru. Payload dan respons dicatat di file log yang sama.
+
+Untuk melihat hasilnya, panggil `GET /api/v1/devices/{id}/health` dengan UUID
+device; field `uptimeS` ditampilkan sebagai string. Mode heartbeat ini hanya
+mengirim health, sehingga tidak menambah telemetry pada siklus yang sama.
+
+Mode yang dipilih berlaku untuk semua device. Untuk mode berbeda per device,
+isi field `mode` di `devices.json` dengan normal/offline/duplicate/heartbeat dan
+jalankan `--mode mixed` (default). Ganti base URL sesuai backend.
 Hentikan dengan **Ctrl+C**.

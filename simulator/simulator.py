@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 
 TELEMETRY_ENDPOINT = "/api/v1/ingest/telemetry"
 BATCH_ENDPOINT = "/api/v1/ingest/telemetry/batch"
+HEARTBEAT_ENDPOINT = "/api/v1/ingest/heartbeat"
 
 LOG = logging.getLogger("simulator")
 TRAFFIC_LOG = logging.getLogger("simulator.traffic")
@@ -64,6 +65,18 @@ class Device:
     humidity: float = 75.0
     buffer: list = field(default_factory=list)
     fw: str = "1.4.2"
+    boot_time: float = field(default_factory=time.monotonic)
+
+    def heartbeat(self):
+        # Virtual device boots when created; monotonic time ignores clock adjustments.
+        return {
+            "device_id": self.device_id,
+            "ts": int(time.time()),
+            "fw": self.fw,
+            "battery_v": round(random.uniform(3.8, 4.1), 2),
+            "rssi": random.randint(-85, -55),
+            "uptime_s": max(0, int(time.monotonic() - self.boot_time)),
+        }
 
     def sample(self):
         self.temperature = max(18, min(38, self.temperature + random.uniform(-0.3, 0.3)))
@@ -150,6 +163,11 @@ def flush(device, args):
 
 
 def tick(device, cycle, args):
+    if device.mode == "heartbeat":
+        # Health events are not telemetry buffer records; retry with a fresh
+        # heartbeat next cycle if delivery fails.
+        post(args.base_url, HEARTBEAT_ENDPOINT, device.heartbeat(), device.api_key, args.timeout)
+        return
     payload = device.sample()
     if device.mode == "offline" and cycle % (args.offline_cycles + 1) != 0:
         device.buffer.append(payload)
@@ -191,8 +209,8 @@ def load_devices(path, mode="mixed"):
             raise ValueError(f"Device #{index}: fill api_key with the credential from your backend")
         if "\n" in api_key or "\r" in api_key:
             raise ValueError(f"Device #{index}: api_key must not contain newlines")
-        if scenario not in ("normal", "offline", "duplicate"):
-            raise ValueError(f"Device #{index}: mode must be normal, offline, or duplicate")
+        if scenario not in ("normal", "offline", "duplicate", "heartbeat"):
+            raise ValueError(f"Device #{index}: mode must be normal, offline, duplicate, or heartbeat")
         seen.add(device_id)
         devices.append(Device(device_id, scenario if mode == "mixed" else mode, api_key.strip()))
     return devices
@@ -202,7 +220,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=os.getenv("BACKEND_BASE_URL", "http://localhost:3000"))
     parser.add_argument("--interval", type=float, default=60, help="Seconds between sampling cycles (default: 60)")
-    parser.add_argument("--mode", choices=["mixed", "normal", "offline", "duplicate"], default="mixed")
+    parser.add_argument("--mode", choices=["mixed", "normal", "offline", "duplicate", "heartbeat"], default="mixed")
     parser.add_argument("--offline-cycles", type=int, default=3, help="Offline cycles before one online cycle")
     parser.add_argument("--cycles", type=int, default=0, help="Stop after N cycles; 0 means run forever")
     parser.add_argument("--timeout", type=float, default=10, help="HTTP timeout in seconds")
