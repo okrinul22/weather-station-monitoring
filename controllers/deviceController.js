@@ -1,6 +1,29 @@
 import { deviceListQuerySchema, deviceIdParamsSchema, createDeviceSchema, updateDeviceSchema } from "../validators/deviceValidator.js";
-import { listDevices, findDeviceById, createDevice, updateDevice, softDeleteDevice } from "../services/deviceService.js";
+import { listDevices, findDeviceById, createDevice, updateDevice, softDeleteDevice, rotateDeviceCredentials } from "../services/deviceService.js";
 import sendResponse from "../utils/response.js";
+
+export async function postRotateDeviceCredentials(req, res, next) {
+    const result = deviceIdParamsSchema.safeParse(req.params);
+    if (!result.success) {
+        return sendResponse(res, {
+            status: 422, code: "VALIDATION_ERROR",
+            error: {
+                message: "ID device tidak valid.",
+                details: result.error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
+            },
+        });
+    }
+    try {
+        const data = await rotateDeviceCredentials(result.data.id);
+        res.set("Cache-Control", "no-store");
+        return sendResponse(res, { status: 200, code: "DEVICE_CREDENTIALS_ROTATED", data });
+    } catch (error) {
+        if (error.code === "P2025") {
+            return sendResponse(res, { status: 404, code: "DEVICE_NOT_FOUND", error: "Device tidak ditemukan atau sudah di-soft-delete." });
+        }
+        return next(error);
+    }
+}
 
 export async function deleteDevice(req, res, next) {
     const result = deviceIdParamsSchema.safeParse(req.params);

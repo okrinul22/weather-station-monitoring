@@ -1,6 +1,35 @@
 import prisma from "../utils/prisma.js";
 import { randomBytes, createHash } from "node:crypto";
 
+// Registrasi dan rotasi memakai sumber acak kriptografis yang sama:
+// 32 byte = 256 bit, ditulis sebagai 64 karakter hex, bukan dari deviceCode/waktu.
+// Simpan hanya SHA-256(key) di database. Hash bukan key untuk dikirim firmware.
+function generateCredentials() {
+    const apiKey = randomBytes(32).toString("hex");
+    const apiKeyHash = createHash("sha256").update(apiKey).digest("hex");
+    return { apiKey, apiKeyHash };
+}
+
+// POST /api/v1/devices/{id}/credentials/rotate tanpa body; id adalah UUID.
+// Simpan data.apiKey dari respons ke konfigurasi firmware; GET tidak bisa
+// mengambil key asli lagi. Jika respons hilang, lakukan rotasi ulang.
+// Penggunaan firmware: kirim header X-API-Key berisi key ASLI pada POST
+// /api/v1/ingest/telemetry, /telemetry/batch, atau /heartbeat. Body device_id
+// berisi deviceCode (mis. WS-GRT-001), bukan UUID pada URL rotasi.
+// Backend ingestion memverifikasi SHA-256(key) terhadap hash device tersebut.
+// Jangan kirim hash sebagai key; gunakan HTTPS dan jangan simpan key di log/Git.
+// Update hash langsung mencabut key lama untuk autentikasi request berikutnya;
+// request yang sudah lolos autentikasi sebelum rotasi dapat tetap selesai.
+export async function rotateDeviceCredentials(id) {
+    const { apiKey, apiKeyHash } = generateCredentials();
+    const device = await prisma.device.update({
+        where: { id, deletedAt: null },
+        data: { apiKeyHash },
+        select: { id: true, deviceCode: true },
+    });
+    return { ...device, apiKey };
+}
+
 export async function softDeleteDevice(id) {
     return prisma.$transaction(async (tx) => {
         const device = await tx.device.findFirst({
@@ -96,8 +125,7 @@ export async function createDevice({ device_code, name, location_id, status }) {
         throw error;
     }
 
-    const apiKey = randomBytes(32).toString("hex");
-    const apiKeyHash = createHash("sha256").update(apiKey).digest("hex");
+    const { apiKey, apiKeyHash } = generateCredentials();
 
     // Nested create: device dan riwayat status disimpan bersama secara atomik.
     const device = await prisma.device.create({

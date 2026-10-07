@@ -12,6 +12,37 @@ const openapi = {
     ],
 
     paths: {
+        "/api/v1/devices/{id}/credentials/rotate": {
+            post: {
+                summary: "Rotasi API key device",
+                description: "Tanpa body. id adalah UUID device. Membuat key acak 256 bit dan mengganti hash SHA-256 secara atomik. Key lama tidak berlaku untuk autentikasi berikutnya; request yang sudah terautentikasi dapat selesai. Simpan data.apiKey ke firmware dan kirim lewat X-API-Key pada ingestion dengan device_id berupa deviceCode. Key asli hanya dikembalikan pada respons ini; GET tidak mengembalikannya. Rotasi tidak mengaktifkan device DECOMMISSIONED. Endpoint management belum dilindungi autentikasi admin.",
+                tags: ["Devices"],
+                parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+                responses: {
+                    "200": {
+                        description: "Kredensial diganti. Code DEVICE_CREDENTIALS_ROTATED.",
+                        headers: { "Cache-Control": { schema: { type: "string", example: "no-store" } } },
+                        content: { "application/json": { schema: {
+                            type: "object",
+                            properties: {
+                                code: { type: "string", example: "DEVICE_CREDENTIALS_ROTATED" },
+                                data: { type: "object", properties: {
+                                    id: { type: "string", format: "uuid" },
+                                    deviceCode: { type: "string", example: "WS-GRT-001" },
+                                    apiKey: { type: "string", pattern: "^[a-f0-9]{64}$", description: "Key asli baru; simpan ke firmware." },
+                                } },
+                                error: { type: "string", nullable: true, example: null },
+                                timestamp: { type: "string", format: "date-time" },
+                                request_id: { type: "string", format: "uuid" },
+                            },
+                        } } },
+                    },
+                    "404": { description: "Device tidak ditemukan atau sudah soft-delete. Code DEVICE_NOT_FOUND." },
+                    "422": { description: "ID bukan UUID valid. Code VALIDATION_ERROR." },
+                    "500": { description: "Kegagalan database/internal. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
+        },
         "/api/v1/sensors/{id}": {
             delete: {
                 summary: "Soft-delete sensor",

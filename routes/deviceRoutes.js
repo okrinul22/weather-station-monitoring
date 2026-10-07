@@ -1,10 +1,13 @@
 import { Router } from "express";
-import { getDevices, getDeviceById, postDevice, patchDevice, deleteDevice } from "../controllers/deviceController.js";
+import { getDevices, getDeviceById, postDevice, patchDevice, deleteDevice, postRotateDeviceCredentials } from "../controllers/deviceController.js";
 
 const router = Router();
 
 router.get("/", getDevices);
 router.post("/", postDevice);
+// Endpoint pengelolaan kredensial; autentikasi/otorisasi admin belum tersedia
+// pada router management ini. API key device hanya untuk router ingestion.
+router.post("/:id/credentials/rotate", postRotateDeviceCredentials);
 router.get("/:id", getDeviceById);
 router.patch("/:id", patchDevice);
 router.delete("/:id", deleteDevice);
