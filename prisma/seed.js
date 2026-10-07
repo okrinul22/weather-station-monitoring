@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createHash, randomBytes, scryptSync } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/prisma/index.js";
+import { PrismaClient, Prisma } from "../generated/prisma/index.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -35,11 +35,23 @@ const stations = [
   { code: "DEMO-WS-TSM-003", name: "Demo Tasikmalaya", latitude: -7.3274, longitude: 108.2207, altitudeM: 350 },
 ];
 
+function rawValueFor(type, stationIndex, hourIndex) {
+  // Siklus siang/malam memakai jam UTC+7; timestamp tetap disimpan dalam UTC.
+  const localHour = (hourIndex + 7) % 24;
+  if (type.code === "rain_counter") return Math.floor(hourIndex / 6) + stationIndex;
+  if (type.code === "solar_rad") {
+    return Number((Math.max(0, Math.sin(((localHour - 6) / 12) * Math.PI)) * (800 + stationIndex * 50)).toFixed(4));
+  }
+  return Number((type.base + type.amplitude * Math.sin((localHour / 24) * Math.PI * 2) + stationIndex).toFixed(4));
+}
+
 async function seed(prisma) {
-  // Pemasangan dan kalibrasi awal berlaku sejak tujuh hari kalender UTC lalu.
+  // Tujuh hari kalender UTC sebelum hari ini, satu pembacaan per jam.
   const end = new Date();
   end.setUTCHours(0, 0, 0, 0);
   const start = new Date(end.getTime() - 7 * DAY);
+  let readingsAdded = 0;
+  let aggregatesAdded = 0;
 
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.upsert({
@@ -133,7 +145,7 @@ async function seed(prisma) {
             sensorTypeId: type.id,
           },
         });
-        await tx.sensorInstallation.upsert({
+        const installation = await tx.sensorInstallation.upsert({
           where: { id: seedId(`installation:${sensor.serialNumber}`) },
           update: {},
           create: {
@@ -143,7 +155,7 @@ async function seed(prisma) {
             installedAt: start,
           },
         });
-        await tx.sensorCalibration.upsert({
+        const calibration = await tx.sensorCalibration.upsert({
           where: { id: seedId(`calibration:${sensor.serialNumber}`) },
           update: {},
           create: {
@@ -156,7 +168,60 @@ async function seed(prisma) {
           },
         });
 
+        const rows = [];
+        for (let hour = 0; hour < 7 * 24; hour++) {
+          const deviceTime = new Date(start.getTime() + hour * HOUR);
+          if (deviceTime < installation.installedAt ||
+            (installation.removedAt && deviceTime >= installation.removedAt)) {
+            throw new Error(`Pemasangan ${sensor.serialNumber} tidak mencakup periode seed.`);
+          }
+          let rawValue = new Prisma.Decimal(rawValueFor(definition, stationIndex, hour));
+          // Satu pembacaan suhu di luar rentang per device per hari.
+          if (type.code === "temp_air" && hour % 24 === 12) {
+            rawValue = type.validMax.plus(10);
+          }
+          const correctedValue = rawValue.mul(calibration.scale).plus(calibration.offset).toDecimalPlaces(4);
+          const qualityFlag = correctedValue.lt(type.validMin) || correctedValue.gt(type.validMax)
+            ? "OUT_OF_RANGE" : "GOOD";
+          rows.push({
+            installationId: installation.id,
+            calibrationId: calibration.id,
+            deviceTime,
+            serverTime: new Date(deviceTime.getTime() + 2000),
+            seq: Math.floor(deviceTime.getTime() / HOUR),
+            rawValue,
+            correctedValue,
+            qualityFlag,
+          });
+        }
+        const inserted = await tx.sensorReading.createMany({ data: rows, skipDuplicates: true });
+        readingsAdded += inserted.count;
 
+        // Ringkasan berasal dari data tersimpan, hanya sampel berkualitas GOOD.
+        const saved = await tx.sensorReading.findMany({
+          where: { installationId: installation.id, deviceTime: { gte: start, lt: end }, qualityFlag: "GOOD" },
+          select: { deviceTime: true, correctedValue: true },
+        });
+        const aggregates = [];
+        for (let day = 0; day < 7; day++) {
+          const bucketStart = new Date(start.getTime() + day * DAY);
+          const values = saved.filter((row) => row.deviceTime >= bucketStart && row.deviceTime.getTime() < bucketStart.getTime() + DAY)
+            .map((row) => row.correctedValue);
+          const sum = values.reduce((total, value) => total.plus(value), new Prisma.Decimal(0));
+          aggregates.push({
+            deviceId: device.id,
+            sensorTypeId: type.id,
+            bucketStart,
+            bucketInterval: "1d",
+            minValue: values.length ? Prisma.Decimal.min(...values) : null,
+            maxValue: values.length ? Prisma.Decimal.max(...values) : null,
+            avgValue: values.length ? sum.div(values.length).toDecimalPlaces(4) : null,
+            sumValue: values.length ? sum : null,
+            sampleCount: values.length,
+          });
+        }
+        const insertedAggregates = await tx.readingAggregate.createMany({ data: aggregates, skipDuplicates: true });
+        aggregatesAdded += insertedAggregates.count;
       }
     }
 
@@ -208,7 +273,7 @@ async function seed(prisma) {
 
   console.log("Seed berhasil: 1 user demo, 3 lokasi, 3 device, 7 tipe sensor, 21 sensor, pemasangan, dan kalibrasi.");
   console.log(`Pemasangan dan kalibrasi awal berlaku sejak ${start.toISOString()}.`);
-  console.log("Seeder tidak mengisi sensor_reading atau reading_aggregate; kirim telemetry untuk menambah pembacaan.");
+  console.log(`Data baru: ${readingsAdded} pembacaan, ${aggregatesAdded} aggregate harian.`);
 }
 
 async function main() {
