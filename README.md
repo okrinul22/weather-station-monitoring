@@ -17,7 +17,7 @@ Backend API untuk sistem monitoring stasiun cuaca. Project ini dibuat untuk Tes 
 - Desain database dan ERD.
 - Prisma schema untuk 10 entitas utama.
 - Migration awal PostgreSQL.
-- Seeder: 3 device demo, 7 tipe sensor, dan data historis 7 hari.
+- Seeder: 3 device demo, 7 tipe sensor, pemasangan, dan kalibrasi awal.
 
 ## Arsitektur
 
@@ -200,16 +200,14 @@ Data yang dibuat pada database kosong:
 | Riwayat status awal `ACTIVE` | 3 |
 | Tipe sensor | 7 |
 | Sensor, pemasangan, dan kalibrasi awal | Masing-masing 21 |
-| Pembacaan per jam selama 7 hari | 3.528 |
-| Aggregate harian per device dan tipe sensor | 147 |
+| Pembacaan sensor | 0 (diisi melalui telemetry) |
+| Aggregate harian | 0 (tidak diisi seeder) |
 
 Tipe sensor: `temp_air`, `humidity`, `pressure`, `wind_speed`, `wind_dir`, `rain_counter`, dan `solar_rad`. Satuan dan rentang valid merupakan asumsi demo. `rain_counter` adalah penghitung kumulatif, bukan curah hujan dalam mm; jumlah nilai counter pada aggregate bukan total curah hujan.
 
-Periode data adalah 7 hari kalender UTC sebelum hari seeder dijalankan. Misalnya, jika dijalankan pada 6 Oktober UTC, pembacaan mencakup 29 September pukul 00:00 sampai 5 Oktober pukul 23:00 UTC. Timestamp disimpan dalam UTC.
+Pemasangan dan kalibrasi awal berlaku sejak tujuh hari kalender UTC sebelum seeder dijalankan. Setiap device demo mempunyai 7 sensor dengan offset awal `0` dan scale `1`. Seeder tidak mengisi `sensor_reading` atau `reading_aggregate`; pembacaan ditambahkan melalui endpoint telemetry.
 
-Setiap device mempunyai 7 sensor dengan offset awal `0` dan scale `1`. Ada 21 pembacaan suhu `OUT_OF_RANGE` (satu per device per hari), tetap tersimpan bersama nilai mentahnya. Aggregate hanya memakai pembacaan `GOOD`.
-
-Seeder tidak menghapus data atau memperbarui record yang sudah ada. `upsert`, ID tetap, dan `skipDuplicates` mencegah duplikasi saat dijalankan ulang pada hari UTC yang sama. Jika dijalankan pada hari berikutnya, periode bergeser dan data hari baru ditambahkan. Jangan gunakan seeder demo untuk memperbaiki aggregate setelah pembacaan diedit; record aggregate yang sudah ada dilewati.
+Seeder tidak menghapus data atau memperbarui record yang sudah ada. `upsert` dan ID tetap mencegah duplikasi saat seeder dijalankan ulang. Menjalankan ulang seeder tidak membuat pembacaan baru. Perubahan seeder ini tidak menghapus reading atau aggregate lama. Untuk menghapus seluruh data database development dan menjalankan ulang migration, gunakan `npx prisma migrate reset`, lalu `npm run db:generate` dan `npm run db:seed`. Reset juga menghapus device yang dibuat lewat API beserta kredensialnya.
 
 User demo mempunyai email `operator.demo@example.com` dan password development `DemoWeather123!`. Password disimpan sebagai hash scrypt dengan salt acak, dalam format `scrypt$<salt>$<hash>`, bukan plaintext. Endpoint login belum tersedia; implementasi login nantinya harus memverifikasi format hash ini. Seeder tidak mengganti nama atau password user yang sudah ada dengan email tersebut. Riwayat status device yang baru dibuat mengacu ke user demo; riwayat yang sudah ada tetap dipertahankan.
 
