@@ -23,6 +23,10 @@ export const deviceIdParamsSchema = z.object({
     }),
 });
 
+export const deviceHealthQuerySchema = z.strictObject({
+    offline_minutes: positiveInteger(1440, 15),
+});
+
 export const createDeviceSchema = z.strictObject({
     device_code: z.string().trim().min(1, "Kode device wajib diisi.").max(50, "Kode device maksimal 50 karakter."),
     name: z.string().trim().min(1, "Nama device wajib diisi.").max(150, "Nama device maksimal 150 karakter."),

@@ -17,6 +17,37 @@ const openapi = {
 
     paths: {
         ...ingestPaths,
+        "/api/v1/devices/{id}/health": {
+            get: {
+                summary: "Mengambil kesehatan dan status koneksi device",
+                description: "Snapshot tabel device tanpa mengubah lifecycle. ONLINE jika lastSeenAt berusia maksimal offline_minutes; OFFLINE jika lebih lama; NEVER_SEEN jika belum ada kiriman. Acuan adalah waktu penerimaan telemetry/heartbeat, bukan waktu pengukuran. Status koneksi terpisah dari status ACTIVE/MAINTENANCE/DECOMMISSIONED dan tidak memastikan penyebab offline. Device decommissioned tetap dapat diperiksa. uptimeS dikirim sebagai string; metadata yang belum tersedia bernilai null. Endpoint management belum dilindungi autentikasi user/admin.",
+                tags: ["Devices"],
+                parameters: [
+                    { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+                    { name: "offline_minutes", in: "query", description: "Batas usia kiriman dalam menit; integer 1–1440.", schema: { type: "integer", minimum: 1, maximum: 1440, default: 15 } },
+                ],
+                responses: {
+                    "200": {
+                        description: "Code DEVICE_HEALTH_FETCHED. Nilai baterai dan uptime berupa string agar presisi aman.",
+                        headers: { "Cache-Control": { schema: { type: "string", example: "no-store" } } },
+                        content: { "application/json": { example: {
+                            code: "DEVICE_HEALTH_FETCHED",
+                            data: {
+                                id: "550e8400-e29b-41d4-a716-446655440000", deviceCode: "WS-GRT-001",
+                                status: "ACTIVE", connectionStatus: "ONLINE",
+                                lastSeenAt: "2026-10-07T05:00:00.000Z", lastDeviceTime: "2026-10-07T04:59:58.000Z",
+                                firmwareVersion: "1.4.2", batteryV: "3.9", rssi: -70, uptimeS: "86400",
+                                secondsSinceLastSeen: 60, offlineMinutes: 15, checkedAt: "2026-10-07T05:01:00.000Z",
+                            },
+                            error: null, timestamp: "2026-10-07T05:01:00.000Z", request_id: "550e8400-e29b-41d4-a716-446655440001",
+                        } } },
+                    },
+                    "404": { description: "Device tidak ditemukan atau sudah soft-delete. Code DEVICE_NOT_FOUND." },
+                    "422": { description: "UUID/query tidak valid atau query tidak dikenal. Code VALIDATION_ERROR." },
+                    "500": { description: "Kesalahan internal/database. Code INTERNAL_SERVER_ERROR." },
+                },
+            },
+        },
         "/api/v1/devices/{id}/credentials/rotate": {
             post: {
                 summary: "Rotasi API key device",

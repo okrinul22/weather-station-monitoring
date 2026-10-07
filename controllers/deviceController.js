@@ -1,6 +1,28 @@
-import { deviceListQuerySchema, deviceIdParamsSchema, createDeviceSchema, updateDeviceSchema } from "../validators/deviceValidator.js";
-import { listDevices, findDeviceById, createDevice, updateDevice, softDeleteDevice, rotateDeviceCredentials } from "../services/deviceService.js";
+import { deviceListQuerySchema, deviceIdParamsSchema, deviceHealthQuerySchema, createDeviceSchema, updateDeviceSchema } from "../validators/deviceValidator.js";
+import { listDevices, findDeviceById, createDevice, updateDevice, softDeleteDevice, rotateDeviceCredentials, getDeviceHealth } from "../services/deviceService.js";
 import sendResponse from "../utils/response.js";
+
+export async function getDeviceHealthById(req, res, next) {
+    const params = deviceIdParamsSchema.safeParse(req.params);
+    const query = deviceHealthQuerySchema.safeParse(req.query);
+    if (!params.success || !query.success) {
+        const issues = [...(!params.success ? params.error.issues : []), ...(!query.success ? query.error.issues : [])];
+        return sendResponse(res, {
+            status: 422, code: "VALIDATION_ERROR",
+            error: { message: "ID atau parameter health tidak valid.", details: issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })) },
+        });
+    }
+    try {
+        const data = await getDeviceHealth(params.data.id, query.data.offline_minutes);
+        if (!data) {
+            return sendResponse(res, { status: 404, code: "DEVICE_NOT_FOUND", error: "Device tidak ditemukan atau sudah di-soft-delete." });
+        }
+        res.set("Cache-Control", "no-store");
+        return sendResponse(res, { status: 200, code: "DEVICE_HEALTH_FETCHED", data });
+    } catch (error) {
+        return next(error);
+    }
+}
 
 export async function postRotateDeviceCredentials(req, res, next) {
     const result = deviceIdParamsSchema.safeParse(req.params);

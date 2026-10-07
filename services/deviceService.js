@@ -1,6 +1,32 @@
 import prisma from "../utils/prisma.js";
 import { randomBytes, createHash } from "node:crypto";
 
+// Health adalah snapshot tabel device, tidak menulis data atau mengubah lifecycle.
+// Pakai waktu penerimaan (lastSeenAt), bukan waktu pengukuran buffered device.
+export async function getDeviceHealth(id, offlineMinutes = 15, now) {
+    const device = await prisma.device.findFirst({
+        where: { id, deletedAt: null },
+        select: {
+            id: true, deviceCode: true, status: true,
+            lastSeenAt: true, lastDeviceTime: true,
+            firmwareVersion: true, batteryV: true, rssi: true, uptimeS: true,
+        },
+    });
+    if (!device) return null;
+    // Ambil waktu setelah query selesai agar kiriman baru tidak menghasilkan usia negatif.
+    const checkedAt = now ?? new Date();
+    const elapsedMs = device.lastSeenAt ? Math.max(0, checkedAt.getTime() - device.lastSeenAt.getTime()) : null;
+    return {
+        ...device,
+        // BigInt dikirim sebagai string supaya JSON aman dan presisi tetap utuh.
+        uptimeS: device.uptimeS?.toString() ?? null,
+        connectionStatus: elapsedMs === null ? "NEVER_SEEN" : elapsedMs > offlineMinutes * 60_000 ? "OFFLINE" : "ONLINE",
+        secondsSinceLastSeen: elapsedMs === null ? null : Math.floor(elapsedMs / 1000),
+        offlineMinutes,
+        checkedAt,
+    };
+}
+
 // Registrasi dan rotasi memakai sumber acak kriptografis yang sama:
 // 32 byte = 256 bit, ditulis sebagai 64 karakter hex, bukan dari deviceCode/waktu.
 // Simpan hanya SHA-256(key) di database. Hash bukan key untuk dikirim firmware.
